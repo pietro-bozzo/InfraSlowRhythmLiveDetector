@@ -116,10 +116,11 @@ t.Format = 'hh:mm:ss' % Time to use in Open Ephys (see the terminal for the resu
 
 SetCurrentSession(session)
 
-start_acc = 1500; % Start time (s)
-stop_acc  = 1700; % Stop time (s)
+start_acc = 25000; % Start time (s)
+stop_acc  = 26500; % Stop time (s)
 
-% Load 3 accelerometer components
+% Load 3 accelerometer components /!\ the channels won't be the same than
+% 128, ... you have to check that (on neuroscope)
 a1 = GetWidebandData(128,'intervals',[start_acc stop_acc]); % X
 a2 = GetWidebandData(129,'intervals',[start_acc stop_acc]); % Y
 a3 = GetWidebandData(130,'intervals',[start_acc stop_acc]); % Z
