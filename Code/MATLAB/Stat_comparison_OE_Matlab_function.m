@@ -1,3 +1,4 @@
+function [F_score, TP_pct, FP_pct, FN_pct] = Stat_comparison_OE_Matlab_function(session, filename, start_reccord_sec)
 % =========================================================================
 % PIPELINE — Comparison Between Open Ephys Detection and MATLAB Detection
 %
@@ -7,22 +8,16 @@
 %    (Pietro's algorithms)
 % 3) Quantitatively evaluate detection performance (precision, recall, F-score)
 
-% DEPENDENCIES
-% formatage_list.mat
-
-% By Nathan Mimouni, 2026
-% =========================================================================
-
 
 %% LOAD SESSION FOR COMPARISON
 
 % Load the same recording session used for MATLAB-based detection
 % (same logic as sessions_analyse_UsAvals_Nath.m)
 
-session = '/mnt/hubel-data-139/perceval/Rat003_20231227/Rat003_20231227.xml'; % Change recording day here
+session = '/mnt/hubel-data-139/karadoc/Rat004_20240228/Rat004_20240228.xml'; % Change recording day here
 [filebase,basename] = fileparts(session);
 
-filename = 'InfraSlowRhythmLiveDetector/Output_oe/Perceval_data139_Rat003_20231227/IS_wake_timings_1455sec.txt';
+filename = 'InfraSlowRhythmLiveDetector/Output_oe/IS_wake_timings_Perceval_1.txt';
 txt = fileread(filename);
 
 R = regions(session, ...
@@ -59,7 +54,7 @@ L_start_stop = eventIntervals(R);
 start = L_start_stop(1); % Session start time (s)
 stop  = L_start_stop(2); % Session stop time (s)
 
-start_reccord_sec = 1455; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
+start_reccord_sec = 1580; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
 decay_from_open_ephys = seconds(start_reccord_sec - start);   %26*60 + 40; % seconds
 
 % Align Open Ephys time with cumulative MATLAB session time
@@ -114,57 +109,7 @@ PlotIntervals(IS_OE_intervals,'color',[0.4 0 1],'alpha',0.5,'legend','Nathan det
 % Evaluate detection quality in terms of time overlap
 % A = MATLAB detection (ground truth)
 % B = Open Ephys detection
-
-% Restrict MATLAB intervals to current session range
-% index = (us_intervals(:,1) < stop & start < us_intervals(:,1));
-% A = us_intervals(index,:);
-% B = IS_OE_intervals;
-% 
-% % 1) Build all breakpoints between A and B
-% t = unique([A(:); B(:)]);
-% t = sort(t);
-% 
-% TP_time = 0; % True Positive time (correct detection)
-% FP_time = 0; % False Positive time (detected but should not)
-% FN_time = 0; % False Negative time (missed detection)
-% 
-% % Compute overlap segment by segment
-% for i = 1:length(t)-1
-%     dt = t(i+1) - t(i);
-%     if dt == 0, continue, end
-% 
-%     inA = any(t(i) >= A(:,1) & t(i+1) <= A(:,2));
-%     inB = any(t(i) >= B(:,1) & t(i+1) <= B(:,2));
-% 
-%     if inA && inB
-%         TP_time = TP_time + dt;
-%     elseif inB && ~inA
-%         FP_time = FP_time + dt;
-%     elseif inA && ~inB
-%         FN_time = FN_time + dt;
-%     end
-% end
-% 
-% % 2) Normalize by total detected time
-% 
-% TotalB = TP_time + FP_time; % Total detected by Open Ephys
-% TotalA = TP_time + FN_time; % Total true (MATLAB)
-% 
-% TP_pct = 100 * TP_time / TotalB;   % % of Open Ephys detection that is correct
-% 
-% % 3) Precision and Recall (time-based)
-% 
-% Precision_time = 100 * TP_time / (TP_time + FP_time)
-% FP_pct = 100 * FP_time / TotalB;
-% FN_pct = 100 * FN_time / TotalA;
-% Recall_time = 100 * TP_time / (TP_time + FN_time)
-% 
-% % 4) F-score
-% 
-% F_score = (2 * Precision_time * Recall_time) / (Precision_time + Recall_time)
-% 
-
-%% ALTERNATIVE METHOD — INTERVAL INTERSECTION
+% INTERVAL INTERSECTION
 
 % Compute overlap directly using interval intersection
 A = us_intervals;

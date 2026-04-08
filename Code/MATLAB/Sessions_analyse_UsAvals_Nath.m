@@ -33,7 +33,7 @@
 
 %% LOAD SESSION AND SELECT PHASE
 
-session = '/mnt/hubel-data-139/karadoc/Rat004_20240228/Rat004_20240228.xml'; % Change recording day here
+session = '/mnt/hubel-data-139/perceval/Rat003_20231227/Rat003_20231227.xml'; % Change recording day here
 % session = '/mnt/hubel-data-131/perceval/Rat003_20231215/Rat003_20231215.xml';
 
 [filebase,basename] = fileparts(session);
@@ -86,7 +86,7 @@ PlotIntervals(is_intervals,'legend','US','Color',[0,1,0]);
 PlotIntervals(is_avals,'color',[0.8,0.2,0.2],'legend','avalanches');
 
 % Display figure on right screen
-plotOnScreen('right');
+%plotOnScreen('right');
 
 
 %% DETERMINE START TIME FOR OPEN-EPHYS FILE READER
@@ -99,7 +99,7 @@ plotOnScreen('right');
 
 L_start_stop = eventIntervals(R);
 
-start_reccord_sec = 1580; % Chosen cumulative session time (s)
+start_reccord_sec = 0;%1580; % Chosen cumulative session time (s)
 
 t = seconds(start_reccord_sec - L_start_stop(1));
 t.Format = 'hh:mm:ss' % Time to use in Open Ephys (see the terminal for the result)

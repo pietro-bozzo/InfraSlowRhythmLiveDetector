@@ -127,6 +127,37 @@ class PyProcessor:
         self.accel_channel_1 = 33             # channel index for accelerometer component 1
         self.accel_channel_2 = 34             # channel index for accelerometer component 2
         self.accel_channel_3 = 35             # channel index for accelerometer component 3
+
+        # ---- STIMULATION PROTOCOL ----
+# Liste de stimulations : (id, frequence_Hz, duree_s)
+# id correspond à la ligne TTL du panneau (0-indexed en Python, donc ligne id+1 dans OE)
+        self.stim_list_raw = [
+    (0,  1.0, 0.5),
+    (1,  2.0, 0.5),
+    (2,  4.0, 0.5),
+    (3,  8.0, 0.5),
+    (4, 10.0, 0.5),
+    (5, 20.0, 0.5),
+    (6, 40.0, 0.5),
+    (7, 80.0, 0.5),
+    (8,  0.5, 1.0),
+    (9,  0.1, 2.0),
+        ]
+# Mélange aléatoire de l'ordre des stimulations
+        import random
+        self.stim_order = list(range(len(self.stim_list_raw)))
+        random.shuffle(self.stim_order)
+        print("Stim order:", self.stim_order)
+
+        self.stim_current_index = 0      # index dans stim_order (quel type de stim on est)
+        self.stim_count = 0              # nb de stim envoyées pour le type courant
+        self.stim_max_per_type = 100     # nb de stim avant de passer au type suivant
+        self.stim_interval = 60.0        # intervalle entre deux stim (secondes)
+        self.stim_timer = 0.0            # timer depuis la dernière stim
+        self.stim_timer_active = False   # True si le timer tourne (IS_state et pas wake)
+        self.stim_done = False           # True si toutes les stim ont été envoyées
+        self.ttl_stim = 5                # ligne TTL pour signaler une stimulation
+
         pass
     
     # communication with the user : 
@@ -432,6 +463,67 @@ class PyProcessor:
                             print("IS detection : ", self.time_counter, file=f)
                     self.IS_state = True
                     self.processor.add_python_event(self.ttl_IS, True)
+            
+        # ---- STEP 4: STIMULATION PROTOCOL ----
+        if not self.stim_done:
+    # Le timer avance uniquement si IS_state=True et pas de wake
+            if self.IS_state and not self.wake_REM_state:
+        # Pause si l'accéléromètre dépasse le seuil
+                accel_ok = not condition_wake  # réutilise la condition wake déjà calculée
+                if accel_ok:
+                    self.stim_timer += buffer_duration
+
+            # Vérifier si c'est le moment d'envoyer une stim
+                    if self.stim_timer >= self.stim_interval:
+                        self.stim_timer = 0.0  # reset timer
+
+                # Récupérer le type de stim courant
+                        stim_idx = self.stim_order[self.stim_current_index]
+                        tim_id, stim_freq, stim_dur = self.stim_list_raw[stim_idx]
+
+                # Envoyer l'événement TTL de stimulation
+                        self.processor.add_python_event(self.ttl_stim, True)
+                        self.processor.add_python_event(self.ttl_stim, False)
+
+                # Envoyer aussi sur la ligne correspondant à l'id de la stim
+                # pour identifier le type dans OE
+                        self.processor.add_python_event(stim_id, True)
+                        self.processor.add_python_event(stim_id, False)
+
+                # Log
+                        msg = (f"STIM sent: type={stim_idx} id={stim_id} "
+                       f"freq={stim_freq}Hz dur={stim_dur}s "
+                       f"count={self.stim_count+1}/{self.stim_max_per_type} "
+                       f"t={self.time_counter:.2f}s")
+                        self.debuglist.append(msg)
+                        with open(self.debug_path, "a") as f:
+                            print(msg, file=f)
+
+                        self.stim_count += 1
+
+                # Passer au type suivant après stim_max_per_type stim
+                        if self.stim_count >= self.stim_max_per_type:
+                            self.stim_count = 0
+                            self.stim_current_index += 1
+                            self.stim_timer = 0.0  # reset timer au changement de type
+
+                            if self.stim_current_index >= len(self.stim_order):
+                                self.stim_done = True
+                                msg = f"ALL STIM DONE at t={self.time_counter:.2f}s"
+                                self.debuglist.append(msg)
+                                with open(self.debug_path, "a") as f:
+                                    print(msg, file=f)
+                            else:
+                                next_idx = self.stim_order[self.stim_current_index]
+                                msg = (f"Switching to stim type {next_idx} "
+                                       f"at t={self.time_counter:.2f}s")
+                                self.debuglist.append(msg)
+                                with open(self.debug_path, "a") as f:
+                                    print(msg, file=f)
+            else:
+        # IS_state=False ou wake : on ne reset pas le timer,
+        # on le met juste en pause en ne l'incrémentant pas
+                pass
 
         return
     
@@ -466,5 +558,9 @@ class PyProcessor:
                 print("debug_ list:", file=f)
                 print(self.debuglist, file=f)
                 print("Temps début recording global t0 (s):", self.global_t0, file=f)
+                print("Stim order (shuffled):", [self.stim_list_raw[i] for i in self.stim_order], file=f)
+                print("Stim current index:", self.stim_current_index, file=f)
+                print("Stim count on current type:", self.stim_count, file=f)
+                print("Stim done:", self.stim_done, file=f)
         return
     

@@ -19,10 +19,10 @@
 % Load the same recording session used for MATLAB-based detection
 % (same logic as sessions_analyse_UsAvals_Nath.m)
 
-session = '/mnt/hubel-data-139/perceval/Rat003_20231227/Rat003_20231227.xml'; % Change recording day here
+session = '/mnt/hubel-data-139/karadoc/Rat004_20240228/Rat004_20240228.xml'; % Change recording day here
 [filebase,basename] = fileparts(session);
 
-filename = 'InfraSlowRhythmLiveDetector/Output_oe/Perceval_data139_Rat003_20231227/IS_wake_timings_1455sec.txt';
+filename = 'InfraSlowRhythmLiveDetector/Output_oe/IS_wake_timings_Perceval_1.txt';
 txt = fileread(filename);
 
 R = regions(session, ...
@@ -59,7 +59,7 @@ L_start_stop = eventIntervals(R);
 start = L_start_stop(1); % Session start time (s)
 stop  = L_start_stop(2); % Session stop time (s)
 
-start_reccord_sec = 1455; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
+start_reccord_sec = 0 %1580; % Chosen cumulative session time (s) % Je crois avi
 decay_from_open_ephys = seconds(start_reccord_sec - start);   %26*60 + 40; % seconds
 
 % Align Open Ephys time with cumulative MATLAB session time
@@ -87,10 +87,8 @@ Liste_timings_wake = Liste_timings_wake(Liste_timings_wake < time_end_reccord_oe
 
 % Format detection lists into Nx2 interval matrices
 % Also apply temporal alignment offset (start_sec_decay)
-start_sec_decay = seconds(start_sec_decay);
 IS_OE_intervals     = formatage_list(Liste_timings_IS,start_sec_decay);
 wakeREM_OE_intervals = formatage_list(Liste_timings_wake,start_sec_decay);
-
 
 
 %% VISUAL COMPARISON — MATLAB vs OPEN EPHYS DETECTION
@@ -106,7 +104,7 @@ PlotIntervals(us_intervals,'legend','Pietro detection','Color',[0,1,0],'alpha',0
 % Open Ephys InfraSlow detection
 PlotIntervals(IS_OE_intervals,'color',[0.4 0 1],'alpha',0.5,'legend','Nathan detection IS (OE)')
 
-%plotOnScreen('right')
+plotOnScreen('right')
 
 
 %% PERFORMANCE METRICS — TIME-BASED F-SCORE (currently used)
@@ -171,7 +169,7 @@ A = us_intervals;
 B = IS_OE_intervals;
 
 TP_intervals = IntersectIntervals(A,B);
-TP_time = sum(TP_intervals(:,2) - TP_intervals(:,1));
+TP_time_2 = sum(TP_intervals(:,2) - TP_intervals(:,1));
 
 FP_intervals = SubtractIntervals(B, A);
 FP_time = sum(FP_intervals(:,2) - FP_intervals(:,1));
@@ -192,8 +190,6 @@ Precision_time = 100 * TP_time / (TP_time + FP_time);
 Recall_time = 100 * TP_time / (TP_time + FN_time);
 
 F_score = (2 * Precision_time * Recall_time) / (Precision_time + Recall_time);
-
-display(F_score);
 
 % =========================================================================
 % END OF PIPELINE
