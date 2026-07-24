@@ -24,14 +24,14 @@ session = '/mnt/hubel-data-131/perceval/Rat003_20231212/Rat003_20231212.xml'; % 
 
 [filebase,basename] = fileparts(session);
 
-filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/Tests_sessions_finaux/IS_wake_timings_classic.txt';
+filename = '/mnt/hubel-data-103/Guillaume/InfraSlowRhythmLiveDetector/Output_oe/Tests_sessions_finaux/Tests_stim/all_day/IS_wake_timings_Perceval_003_20231212_2THRESHOLDS_2005.txt';
 txt = fileread(filename);
 
 R = regions(session, ...
     regions='nr', ...
     events=["InfraSlowRhythm/slownr","InfraSlowRhythm/slowavalnr"], ...
     states=["sws","rem"]);
-%% If there is a problem with regions for some sessions : get rid of phases = 'sleepm'
+% =========================================================================
 
 % Load MATLAB-detected intervals (ground truth reference)
 us_intervals = R.eventIntervals('slownr');      % InfraSlow Rhythm (MATLAB detection)
@@ -59,8 +59,7 @@ us_avals     = R.eventIntervals('slowavalnr');  % Avalanches
 
 L_start_stop = eventIntervals(R);
 start = L_start_stop(1); % Session start time (s)
-%stop  = L_start_stop(2); % Session stop time (s)
-stop = 12000;
+stop  = 28000; % Session stop time (s)
 
 start_reccord_sec = 1970; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
 decay_from_open_ephys = seconds(start_reccord_sec - start);   %26*60 + 40; % seconds
@@ -72,6 +71,31 @@ start_sec_decay = decay_from_open_ephys + start; % (s)
 time_end_reccord_oe = stop - start_sec_decay; % (s)
 
 
+%% Stimulation
+
+%% LOAD STIMULATION FILE
+
+stim_filename = '/mnt/hubel-data-103/Guillaume/InfraSlowRhythmLiveDetector/Code/Arduino/stim_20260526_105457.csv';
+stim_table = readtable(stim_filename);
+
+% Keep only STIM_START and STIM_END rows
+stim_starts = stim_table.t_pc_ms(strcmp(stim_table.event, 'STIM_START')) / 1000;
+stim_ends   = stim_table.t_pc_ms(strcmp(stim_table.event, 'STIM_END'))   / 1000;
+
+% Pair them into [start, end] intervals
+n_stim = min(length(stim_starts), length(stim_ends));
+stim_intervals_raw = [stim_starts(1:n_stim), stim_ends(1:n_stim)+5];
+
+% Filter out intervals beyond valid OE recording time
+valid_stim = stim_intervals_raw(:,1) < seconds(time_end_reccord_oe);
+stim_intervals_raw = stim_intervals_raw(valid_stim, :);
+
+% Apply temporal alignment offset (same as OE intervals)
+stim_intervals = stim_intervals_raw + seconds(start_sec_decay);
+
+stim_intervals = stim_intervals;
+
+
 %% LOAD OPEN EPHYS DETECTION RESULTS
 
 % Raw timestamps detected by Open Ephys (start1, end1, start2, end2, ...)
@@ -81,9 +105,9 @@ blocks = regexp(txt, 'STOP ACQUISITION NUMBER \d+', 'split');
 last_block = blocks{end};
 
 IS_str = regexp(last_block, '\[(.*?)\]', 'tokens');
-Liste_timings_IS = str2num(IS_str{1}{1});
-Liste_timings_wake_fr = str2num(IS_str{2}{1});
-Liste_timings_wake_accel = str2num(IS_str{3}{1});
+Liste_timings_IS = [];%str2num(IS_str{1}{1});
+Liste_timings_wake_fr = [];%str2num(IS_str{2}{1});
+Liste_timings_wake_accel = [];%str2num(IS_str{3}{1});
 
 Liste_timings_IS   = Liste_timings_IS(Liste_timings_IS < time_end_reccord_oe);
 Liste_timings_wake_fr = Liste_timings_wake_fr(Liste_timings_wake_fr < time_end_reccord_oe);
@@ -104,16 +128,19 @@ wakeREM_accel_OE_intervals = formatage_list(Liste_timings_wake_accel,start_sec_d
 R.plotFiringRates(start,stop,step=5,smooth=45);
 xline(start_sec_decay, 'r--', 'LineWidth', 1);
 
-% MATLAB detection (reference)
-PlotIntervals(us_intervals,'legend','Pietro detection','Color',[0,1,0],'alpha',0.6)
+% Arduino Stimulation
+% Stimulation intervals
+PlotIntervals(stim_intervals, 'color', [1 0 0], 'alpha', 0.8, 'legend', 'Stimulations (STIM)')
 
+% MATLAB detection (reference)
+%PlotIntervals(us_intervals,'legend','Pietro detection','Color',[0,1,0],'alpha',0.6)
 
 % Open Ephys InfraSlow detection
-PlotIntervals(IS_OE_intervals,'color',[0.4 0 1],'alpha',0.5,'legend','Nathan detection IS (OE)')
+%PlotIntervals(IS_OE_intervals,'color',[0.4 0 1],'alpha',0.5,'legend','Nathan detection IS (OE)')
 
 % Open Ephys wake detection
-PlotIntervals(wakeREM_fr_OE_intervals,'color',[1 0 0],'legend','Nathan detection wake fr (OE)')
-PlotIntervals(wakeREM_accel_OE_intervals,'color',[1 0 0.4],'legend','Nathan detection wake acceleration (OE)')
+%PlotIntervals(wakeREM_fr_OE_intervals,'color',[1 0 0],'legend','Nathan detection wake fr (OE)')
+%PlotIntervals(wakeREM_accel_OE_intervals,'color',[1 0 0.4],'legend','Nathan detection wake acceleration (OE)')
 
 %plotOnScreen('right')
 
@@ -175,34 +202,34 @@ PlotIntervals(wakeREM_accel_OE_intervals,'color',[1 0 0.4],'legend','Nathan dete
 
 %% ALTERNATIVE METHOD — INTERVAL INTERSECTION
 
-% Compute overlap directly using interval intersection
-A = us_intervals;
-B = IS_OE_intervals;
-
-TP_intervals = IntersectIntervals(A,B);
-TP_time = sum(TP_intervals(:,2) - TP_intervals(:,1));
-
-FP_intervals = SubtractIntervals(B, A);
-FP_time = sum(FP_intervals(:,2) - FP_intervals(:,1));
-
-FN_intervals = SubtractIntervals(A, B);
-FN_time = sum(FN_intervals(:,2) - FN_intervals(:,1));
-
-% Recompute metrics (same interpretation as above)
-
-TotalB = TP_time + FP_time;
-TotalA = TP_time + FN_time;
-
-TP_pct = 100 * TP_time / TotalB;
-FP_pct = 100 * FP_time / TotalB;
-FN_pct = 100 * FN_time / TotalA;
-
-Precision_time = 100 * TP_time / (TP_time + FP_time);
-Recall_time = 100 * TP_time / (TP_time + FN_time);
-
-F_score = (2 * Precision_time * Recall_time) / (Precision_time + Recall_time);
-
-display(F_score);
+% % Compute overlap directly using interval intersection
+% A = us_intervals;
+% B = IS_OE_intervals;
+% 
+% TP_intervals = IntersectIntervals(A,B);
+% TP_time = sum(TP_intervals(:,2) - TP_intervals(:,1));
+% 
+% FP_intervals = SubtractIntervals(B, A);
+% FP_time = sum(FP_intervals(:,2) - FP_intervals(:,1));
+% 
+% FN_intervals = SubtractIntervals(A, B);
+% FN_time = sum(FN_intervals(:,2) - FN_intervals(:,1));
+% 
+% % Recompute metrics (same interpretation as above)
+% 
+% TotalB = TP_time + FP_time;
+% TotalA = TP_time + FN_time;
+% 
+% TP_pct = 100 * TP_time / TotalB;
+% FP_pct = 100 * FP_time / TotalB;
+% FN_pct = 100 * FN_time / TotalA;
+% 
+% Precision_time = 100 * TP_time / (TP_time + FP_time);
+% Recall_time = 100 * TP_time / (TP_time + FN_time);
+% 
+% F_score = (2 * Precision_time * Recall_time) / (Precision_time + Recall_time);
+% 
+% display(F_score);
 
 % =========================================================================
 % END OF PIPELINE

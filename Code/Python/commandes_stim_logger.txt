@@ -1,0 +1,3 @@
+ 
+pip install pyserial
+python stim_logger.py --port /dev/ttyACM0

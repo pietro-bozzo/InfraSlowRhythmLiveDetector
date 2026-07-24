@@ -118,15 +118,15 @@ class PyProcessor:
         self.min_time_OFF = 0.5               # minimum duration of OFF to count (seconds)
         self.min_time_ON = 0.3                # minimum duration of ON to count (seconds)
         self.saving = True                    # whether to save IS and Wake timings to .txt
-        self.path = "/media/data-103/Guillaume/InfraSlowRhythmLiveDetector/Output_oe/"  # save path
-        self.file_name = "IS_wake_timings_Perceval_1.txt"  # name of the file you will create with the timings
+        self.path = "/media/data-103/Guillaume/InfraSlowRhythmLiveDetector/Output_oe/Tests_sessions_finaux/"  # save path
+        self.file_name = "IS_wake_timings_Perceval1212_NathPie.txt"  # name of the file you will create with the timings
         self.debug_name = "debug.txt"
         self.debug_path = os.path.abspath(self.path + self.debug_name)
         # in .py it begins at 0 and in O-E it begins at 1 /!\ :
         self.mean_spike_rate_channel = 32     # channel index (position of the channels in the channel map, not the number) for mean firing rate
-        self.accel_channel_1 = 33             # channel index for accelerometer component 1
-        self.accel_channel_2 = 34             # channel index for accelerometer component 2
-        self.accel_channel_3 = 35             # channel index for accelerometer component 3
+        self.accel_channel_1 = 128              # channel index for accelerometer component 1
+        self.accel_channel_2 = 129             # channel index for accelerometer component 2
+        self.accel_channel_3 = 130             # channel index for accelerometer component 3
         pass
     
     # communication with the user : 
@@ -236,8 +236,10 @@ class PyProcessor:
 
         if self.event_print == 1:
             self.event_print = 2
-            mess = f"[OE DEBUG] time_counter = {self.time_counter:.3f} s"
+            mess = f"[OE DEBUG] time_counter = {self.time_counter:.3f} s, taille de data = {data.shape}"
             self.debuglist.append(mess)
+            with open(self.debug_path, "a") as f:
+                print("acceleration : ", acceleration_glissante, file=f)
 
         # WARNING: If the user clicks to start threshold calculation, they have 20 sec to unclick or it restarts
         # Until the user requests, the Python processor does not engage threshold calculation

@@ -19,17 +19,19 @@
 % Load the same recording session used for MATLAB-based detection
 % (same logic as sessions_analyse_UsAvals_Nath.m)
 
-session = '/mnt/hubel-data-139/perceval/Rat003_20231227/Rat003_20231227.xml'; % Change recording day here
+%session = '/mnt/hubel-data-140/karadoc/Rat004_20240305/Rat004_20240305.xml'; % Change recording day here
+session = '/mnt/hubel-data-131/perceval/Rat003_20231212/Rat003_20231212.xml'; % Change recording day here
+
 [filebase,basename] = fileparts(session);
 
-filename = 'InfraSlowRhythmLiveDetector/Output_oe/Perceval_data139_Rat003_20231227/IS_wake_timings_1455sec.txt';
+filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/Tests_sessions_finaux/IS_wake_timings_classic.txt';
 txt = fileread(filename);
 
 R = regions(session, ...
     regions='nr', ...
-    phases='sleepm', ...
     events=["InfraSlowRhythm/slownr","InfraSlowRhythm/slowavalnr"], ...
     states=["sws","rem"]);
+%% If there is a problem with regions for some sessions : get rid of phases = 'sleepm'
 
 % Load MATLAB-detected intervals (ground truth reference)
 us_intervals = R.eventIntervals('slownr');      % InfraSlow Rhythm (MATLAB detection)
@@ -57,9 +59,10 @@ us_avals     = R.eventIntervals('slowavalnr');  % Avalanches
 
 L_start_stop = eventIntervals(R);
 start = L_start_stop(1); % Session start time (s)
-stop  = L_start_stop(2); % Session stop time (s)
+%stop  = L_start_stop(2); % Session stop time (s)
+stop = 12000;
 
-start_reccord_sec = 1455; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
+start_reccord_sec = 1970; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
 decay_from_open_ephys = seconds(start_reccord_sec - start);   %26*60 + 40; % seconds
 
 % Align Open Ephys time with cumulative MATLAB session time
@@ -79,32 +82,38 @@ last_block = blocks{end};
 
 IS_str = regexp(last_block, '\[(.*?)\]', 'tokens');
 Liste_timings_IS = str2num(IS_str{1}{1});
-Liste_timings_wake = str2num(IS_str{2}{1});
+Liste_timings_wake_fr = str2num(IS_str{2}{1});
+Liste_timings_wake_accel = str2num(IS_str{3}{1});
 
 Liste_timings_IS   = Liste_timings_IS(Liste_timings_IS < time_end_reccord_oe);
-Liste_timings_wake = Liste_timings_wake(Liste_timings_wake < time_end_reccord_oe);
+Liste_timings_wake_fr = Liste_timings_wake_fr(Liste_timings_wake_fr < time_end_reccord_oe);
+Liste_timings_wake_accel = Liste_timings_wake_accel(Liste_timings_wake_accel < time_end_reccord_oe);
 
 
 % Format detection lists into Nx2 interval matrices
 % Also apply temporal alignment offset (start_sec_decay)
 start_sec_decay = seconds(start_sec_decay);
 IS_OE_intervals     = formatage_list(Liste_timings_IS,start_sec_decay);
-wakeREM_OE_intervals = formatage_list(Liste_timings_wake,start_sec_decay);
+wakeREM_fr_OE_intervals = formatage_list(Liste_timings_wake_fr,start_sec_decay);
+wakeREM_accel_OE_intervals = formatage_list(Liste_timings_wake_accel,start_sec_decay);
 
 
 
 %% VISUAL COMPARISON — MATLAB vs OPEN EPHYS DETECTION
 
 R.plotFiringRates(start,stop,step=5,smooth=45);
+xline(start_sec_decay, 'r--', 'LineWidth', 1);
 
 % MATLAB detection (reference)
 PlotIntervals(us_intervals,'legend','Pietro detection','Color',[0,1,0],'alpha',0.6)
 
-% Open Ephys wake detection
-%PlotIntervals(wakeREM_OE_intervals,'color',[1 0 0],'legend','Nathan detection wake (OE)')
 
 % Open Ephys InfraSlow detection
 PlotIntervals(IS_OE_intervals,'color',[0.4 0 1],'alpha',0.5,'legend','Nathan detection IS (OE)')
+
+% Open Ephys wake detection
+PlotIntervals(wakeREM_fr_OE_intervals,'color',[1 0 0],'legend','Nathan detection wake fr (OE)')
+PlotIntervals(wakeREM_accel_OE_intervals,'color',[1 0 0.4],'legend','Nathan detection wake acceleration (OE)')
 
 %plotOnScreen('right')
 

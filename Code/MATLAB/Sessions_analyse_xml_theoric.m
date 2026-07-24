@@ -33,7 +33,9 @@
 
 %% LOAD SESSION AND SELECT PHASE
 
-session = '/mnt/hubel-data-139/perceval/Rat003_20231227/Rat003_20231227.xml'; % Change recording day here
+%session = '/mnt/hubel-data-149/Rat012/Rat012_2025-12-15/Rat012_2025-12-15.xml';
+session = '/mnt/hubel-data-149/LE162_LE163_IniData/2025-12-15_09-59-15/2025-12-15_09-59-15.xml';
+% session = '/mnt/hubel-data-131/perceval/Rat003_20231224/Rat003_20231224.xml'; % Change recording day here
 % session = '/mnt/hubel-data-131/perceval/Rat003_20231215/Rat003_20231215.xml';
 
 [filebase,basename] = fileparts(session);
@@ -41,7 +43,6 @@ session = '/mnt/hubel-data-139/perceval/Rat003_20231227/Rat003_20231227.xml'; % 
 % Load Nucleus Reuniens region during selected phase
 R = regions(session, ...
     regions='nr', ...
-    phases='sleepm', ...
     events=["InfraSlowRhythm/slownr","InfraSlowRhythm/slowavalnr"], ...
     states=["sws","rem"]);
 
@@ -56,21 +57,21 @@ R = regions(session, ...
 % LOAD EVENT INTERVALS (ULTRASLOW & AVALANCHES)
 
 % UltraSlow Rhythm periods
-is_intervals = R.eventIntervals('slownr');
+is_intervals = R.eventIntervals("slownr","sleep#1", "regexp",true);
 
 % Avalanches
-is_avals = R.eventIntervals('slowavalnr');
+is_avals = R.eventIntervals("slowavalnr","sleep#1", "regexp",true);
 
 % Display cumulative session time boundaries
-eventIntervals(R)
+R.eventIntervals("sleep#1", "regexp",true)
 
 
 %% VISUALIZE SESSION: FIRING RATE + EVENTS + STATES
 
 % Extract session time limits
 L_start_stop = eventIntervals(R);
-start = L_start_stop(1); % session start time (s)
-stop  = L_start_stop(2); % session end time (s)
+start = L_start_stop(1) % session start time (s)
+stop  = L_start_stop(2) % session end time (s)
 
 % Convert to hh:mm:ss format (reference for Open Ephys)
 t = seconds(start - L_start_stop(1));
@@ -99,7 +100,8 @@ PlotIntervals(is_avals,'color',[0.8,0.2,0.2],'legend','avalanches');
 
 L_start_stop = eventIntervals(R);
 
-start_reccord_sec = 0;%1580; % Chosen cumulative session time (s)
+intsws = R.eventIntervals("sws","sleep#1", "regexp",true)
+start_reccord_sec = intsws(1) + 20;%1580; % Chosen cumulative session time (s)
 
 t = seconds(start_reccord_sec - L_start_stop(1));
 t.Format = 'hh:mm:ss' % Time to use in Open Ephys (see the terminal for the result)
@@ -114,29 +116,29 @@ t.Format = 'hh:mm:ss' % Time to use in Open Ephys (see the terminal for the resu
 % Accelerometer channels are not easily visualized in Open Ephys,
 % so this step is required to monitor motion offline.
 
-SetCurrentSession(session)
-
-start_acc = 25000; % Start time (s)
-stop_acc  = 26500; % Stop time (s)
-
-% Load 3 accelerometer components /!\ the channels won't be the same than
-% 128, ... you have to check that (on neuroscope)
-a1 = GetWidebandData(128,'intervals',[start_acc stop_acc]); % X
-a2 = GetWidebandData(129,'intervals',[start_acc stop_acc]); % Y
-a3 = GetWidebandData(130,'intervals',[start_acc stop_acc]); % Z
-
-% Time vector
-t = a1(:,1);
-
-% Compute Euclidean norm of acceleration
-acceleration = zeros(numel(a3(:,1)),2);
-acceleration(:,1) = t;
-acceleration(:,2) = sqrt(a1(:,2).^2 + a2(:,2).^2 + a3(:,2).^2);
-
-% Plot acceleration norm
-figure
-plot(t,acceleration(:,2))
-title('Acceleration norm')
-xlabel('time (s)')
-ylabel('µm/s²')
+% SetCurrentSession(session)
+% 
+% start_acc = 25000; % Start time (s)
+% stop_acc  = 26500; % Stop time (s)
+% 
+% % Load 3 accelerometer components /!\ the channels won't be the same than
+% % 128, ... you have to check that (on neuroscope)
+% a1 = GetWidebandData(128,'intervals',[start_acc stop_acc]); % X
+% a2 = GetWidebandData(129,'intervals',[start_acc stop_acc]); % Y
+% a3 = GetWidebandData(130,'intervals',[start_acc stop_acc]); % Z
+% 
+% % Time vector
+% t = a1(:,1);
+% 
+% % Compute Euclidean norm of acceleration
+% acceleration = zeros(numel(a3(:,1)),2);
+% acceleration(:,1) = t;
+% acceleration(:,2) = sqrt(a1(:,2).^2 + a2(:,2).^2 + a3(:,2).^2);
+% 
+% % Plot acceleration norm
+% figure
+% plot(t,acceleration(:,2))
+% title('Acceleration norm')
+% xlabel('time (s)')
+% ylabel('µm/s²')
 
