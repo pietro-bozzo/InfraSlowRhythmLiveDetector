@@ -28,13 +28,14 @@
 %   5) sleeps
 
 % By Nathan Mimouni, 2026
-% =========================================================================
+% ==========================================================
 
 
 %% LOAD SESSION AND SELECT PHASE
 
 %session = '/mnt/hubel-data-149/Rat012/Rat012_2025-12-15/Rat012_2025-12-15.xml';
-session = '/mnt/hubel-data-149/LE162_LE163_IniData/2025-12-15_09-59-15/2025-12-15_09-59-15.xml';
+%session = '/mnt/hubel-data-149/LE162_LE163_IniData/2025-12-15_09-59-15/2025-12-15_09-59-15.xml';
+session = '/mnt/hubel-data-140/karadoc/Rat004_20240314/Rat004_20240314.xml';
 % session = '/mnt/hubel-data-131/perceval/Rat003_20231224/Rat003_20231224.xml'; % Change recording day here
 % session = '/mnt/hubel-data-131/perceval/Rat003_20231215/Rat003_20231215.xml';
 
@@ -43,6 +44,7 @@ session = '/mnt/hubel-data-149/LE162_LE163_IniData/2025-12-15_09-59-15/2025-12-1
 % Load Nucleus Reuniens region during selected phase
 R = regions(session, ...
     regions='nr', ...
+    phases='sleepm', ...
     events=["InfraSlowRhythm/slownr","InfraSlowRhythm/slowavalnr"], ...
     states=["sws","rem"]);
 

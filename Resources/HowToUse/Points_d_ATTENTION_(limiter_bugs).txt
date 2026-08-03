@@ -1,0 +1,28 @@
+
+Attention à upload la bonne channel map
+
+Quand un plugin bug -> L'enlever et le remettre (pour qu'il se re-upload). Si clic-droit -> Delete ne fonctionne pas, sélectionner le plugin et cliquer sur Suppr
+-> PythonProcessor : il faut resélectionner l'environnement conda. Moi par exmple, c'est /home/guillaume/miniconda3/envs/oe-python-plugin, sur lequel j'ai juste installé python 3.10, numpy et ce qu'il faut, pas plus. Ensuite il faut upload le code python du Detector.
+-> ArduinoOutput : il ne s'initialisera pas si un autre script (le script python lié à l'arduino où on visualise les temps de stim par exemple, ou le Serial Monitor d'Arduino IDE s'il est ouvert) est lancé, car il y aura un conflit sur l'utilisation du port. Il faut donc fermer ces scripts, supprimer puis remettre l'Arduino Output et le nom du Device nous donnera ce qu'on doit mettre comme nom de port pour lancer le script d'enregistrement des temps de stimulation python stim_logger_v5.py --port /dev/ttyACM0 (ici par exemple il s'agit de /dev/ttyACM0). L'Output pin correspond à la broche Arduino qui sera lue pour analyser les TTL reçus (13 pour l'instant), et la Line correspond au numéro de TTL qu'on souhaite envoyer à l'Arduino (par exemple 5 pour le TTL InfraSlowActivity).
+
+Spike Detector : Si l'on met Output 33, alors ce n'est pas la channel 33 qui sera overwritten avec la mean spike rate ! Ce sera l'indice de la channel en 33eme position dans la channel map ! Une fois la channel map déterminée, OpenEphys s'en fout du numéro de la channel, il ne considère que son indice de position dans la channel map.
+
+CPU & DF : en haut à gauche on peut voir comment le CPU est exploité par le Thread OpenEphys (cela permet de diagnostiquer des bugs parfois). Si DF est trop rempli (i.e. stockage bientôt saturé), aller dans le dossier OpenEphys pour supprimer des dossiers recorded et libérer de l'espace. Pour moi par exemple cela se trouve dans /home/guillaume/open-ephys/
+
+Le journal des évènements (potentiellement utile au debugging, avec les crash logs) d'OpenEphys se visualise en temps réel avec :
+tail -f "/home/guillaume/.config/open-ephys/configs-api10/activity.log"
+
+En cas de questions plus approfondies, les spécialises d'OpenEphys sont disponibles et réactifs sur le Discord : https://discord.com/channels/932637696503971850/932637696503971855
+
+Si la sesison lague trop, il peut être utile d'augmenter l'audio buffer size (par défaut 1024 samples) en cliquant tout en haut de l'interface sur l'horloge 23 ms (à droite de l'audio et de gate, sur la même hauteur que là où on play la session).
+
+Pour installer des nouveaux plugins -> File > Plugin Installer
+
+Si on lance OpenEphys non pas en local mais depuis Adrian, il faut mimer un audio device fictif :
+export SDL_AUDIODRIVER=dummy
+export AUDIODEV=null
+export ALSA_CARD=Dummy
+export PULSE_SERVER=127.0.0.1
+export QT_X11_NO_MITSHM=1
+export LIBGL_ALWAYS_SOFTWARE=1
+open-ephys

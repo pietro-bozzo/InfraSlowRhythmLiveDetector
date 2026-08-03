@@ -1,0 +1,2 @@
+/mnt/hubel-data-131/perceval/Raw/2023-12-24_08-59-29/Record Node 105/experiment1/recording1/structure.oebin
+7' = 420s

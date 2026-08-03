@@ -10,7 +10,7 @@
 % DEPENDENCIES
 % formatage_list.mat
 
-% By Nathan Mimouni, 2026
+% By Nathan Mimouni, Guigui, Hanna, 2026
 % =========================================================================
 
 
@@ -24,7 +24,7 @@ session = '/mnt/hubel-data-131/perceval/Rat003_20231212/Rat003_20231212.xml'; % 
 
 [filebase,basename] = fileparts(session);
 
-filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/RESTRUCTURED/IS_wake_timings_restructured_2407.txt';
+filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/RESTRUCTURED/IS_wake_timings_restructured_2407_V2.txt';
 txt = fileread(filename);
 
 R = regions(session, ...
@@ -75,7 +75,7 @@ time_end_reccord_oe = stop - start_sec_decay; % (s)
 
 %% LOAD STIMULATION FILE
 
-stim_filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/MULTITEST/stim_20260724_115429.csv';
+stim_filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/RESTRUCTURED/session_events_v2.csv';
 stim_table = readtable(stim_filename);
 
 % Keep only STIM_START and STIM_END rows

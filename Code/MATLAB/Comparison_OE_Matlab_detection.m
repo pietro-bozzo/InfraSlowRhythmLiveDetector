@@ -21,10 +21,11 @@
 
 %session = '/mnt/hubel-data-140/karadoc/Rat004_20240305/Rat004_20240305.xml'; % Change recording day here
 session = '/mnt/hubel-data-131/perceval/Rat003_20231212/Rat003_20231212.xml'; % Change recording day here
+%session = '/mnt/hubel-data-140/karadoc/Rat004_20240314/Rat004_20240314.xml0;'
 
 [filebase,basename] = fileparts(session);
 
-filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/Tests_sessions_finaux/IS_wake_timings_classic.txt';
+filename = '/mnt/hubel-data-103/Guillaume/OpenEphys_Stimulation_Tests/Output_oe/RESTRUCTURED/IS_wake_timings_classic_2026-07-30_16-58-37.txt';
 txt = fileread(filename);
 
 R = regions(session, ...

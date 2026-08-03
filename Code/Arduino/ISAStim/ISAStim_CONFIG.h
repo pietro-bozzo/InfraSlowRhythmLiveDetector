@@ -62,7 +62,7 @@
 #define WINDOW_MS          5000UL   // fenêtre d'intégration du TTL (ms). Pour l'ISA je teste une fenêtre plus réduite
 #define K_MS               850UL   // seuil : TTL intégré > K_MS → pre_wake
 #define PRE_WAKE_CONFIRM_MS 3000UL  // pre_wake continu >= 5s → wake confirmé
-#define SLEEP_CONFIRM_MS   8000UL   // absence de pre_wake >= 8s → sleep confirmé
+#define SLEEP_CONFIRM_MS   3000UL   // absence de pre_wake >= 8s → sleep confirmé
 
 // ── Définition des blocs de stimulation ───────────────────────────────────────
 // À chaque période d'immobilité (après PRE_STIM_WAIT_MS), un bloc est tiré au

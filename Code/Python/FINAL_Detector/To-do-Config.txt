@@ -1,0 +1,11 @@
+ 
+Before each session you need to check :
+
+- The CONFIG path in the Detector file
+- In the CONFIG File :
+    - se
+    - self.mean_spike_rate_clf.path
+    - self.accel_channel_1-2-3 channel
+    - self.n_channels
+    - self.ttl_sync, self.ttl_IS
+    - self.detectors parameters

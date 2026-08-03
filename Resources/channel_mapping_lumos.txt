@@ -1,0 +1,27 @@
+{
+  "0": {
+    "mapping": [
+      22, 13, 4, 15, 6, 24, 29, 11, 2, 20, 16, 7, 30, 9, 1, 21,
+      0, 8, 62, 25, 31, 12, 19, 10, 3, 23, 28, 14, 18, 27, 5, 26,
+      36, 59, 37, 44, 48, 34, 41, 61, 52, 45, 50, 33, 39, 47, 54, 17,
+      43, 63, 55, 32, 57, 46, 42, 60, 53, 35, 38, 56, 49, 58, 51, 40,
+      95, 88, 93, 82, 94, 85, 80, 83, 91, 81,
+      87, 107, 89, 108, 90, 102, 92, 111, 86, 109, 84,
+      96, 103, 99, 105, 97, 104, 101, 106, 110, 100, 98,
+      115, 116, 117, 118, 114, 119, 120, 121, 113, 122, 123, 124, 127, 112, 125, 126,
+      77, 74, 75, 72, 76, 73, 70, 71, 79, 68, 69, 66, 65, 78, 67, 64,
+      128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141
+    ],
+    "enabled": [
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+      true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+    ]
+  }
+}

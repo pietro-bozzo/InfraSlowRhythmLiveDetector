@@ -1,0 +1,11 @@
+[stop_acquisition] t=7880.5s
+  ref_v1: phase2_done=True | sws_time=300.0s | thresh_sws=14.373456954956055
+  5-1: phase2_done=True | sws_time=300.0s | thresh_sws=14.65848083496094
+  5-1.5: phase2_done=True | sws_time=300.0s | thresh_sws=15.69574317932129
+  3-0.3: phase2_done=True | sws_time=300.0s | thresh_sws=14.625253295898439
+  3-0.6: phase2_done=True | sws_time=300.0s | thresh_sws=14.45543022155762
+  3-0.9: phase2_done=True | sws_time=300.0s | thresh_sws=15.336463165283208
+  7-0.7: phase2_done=True | sws_time=300.0s | thresh_sws=14.503033256530763
+  7-1.4: phase2_done=True | sws_time=300.0s | thresh_sws=15.536316680908206
+  7-2.1: phase2_done=True | sws_time=300.0s | thresh_sws=15.352978134155274
+  7-3.5: phase2_done=True | sws_time=300.0s | thresh_sws=15.40017375946045
