@@ -20,11 +20,11 @@
 % (same logic as sessions_analyse_UsAvals_Nath.m)
 
 %session = '/mnt/hubel-data-140/karadoc/Rat004_20240305/Rat004_20240305.xml'; % Change recording day here
-session = '/mnt/hubel-data-149/LE162_LE163_IniData/2025-12-16_09-59-09/2025-12-16_09-59-09.xml'; % Change recording day here
+session = '/mnt/hubel-data-131/perceval/Rat003_20231224/Rat003_20231224.xml'; % Change recording day here
 [filebase,basename] = fileparts(session);
 
 %filename = 'InfraSlowRhythmLiveDetector/Output_oe/Tests_sessions_finaux/IS_wake_timings_parallel_V5_karadoc0305.txt';
-filename = '/mnt/hubel-data-103/Guillaume/InfraSlowRhythmLiveDetector/Code/Python/FINAL_Detector/CONFIGS/Hubel_tests/Outputs_pyDetector/Rat12-12-16/Rat12-12-16IS_wake_timings_FINAL_2026-08-03_13-17-17.txt';
+filename = '/mnt/hubel-data-103/Guillaume/InfraSlowRhythmLiveDetector/Code/Python/FINAL_Detector/CONFIGS/Hubel_tests/Outputs_pyDetector/Karadoc-03-05/Karadoc-03-05IS_wake_timings_FINAL_2026-08-03_14-51-51.txt';
 txt = fileread(filename);
 
 R = regions(session, ...
@@ -60,7 +60,7 @@ L_start_stop = eventIntervals(R);
 start = L_start_stop(1); % Session start time (s)
 stop  = 8000;%L_start_stop(2); % Session stop time (s)
 
-start_reccord_sec = 640; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
+start_reccord_sec = 420; %1580; % Chosen cumulative session time (s) % Je crois avoir compris : sion regarde sleep1, c'est quand sleep 1 commence dans la session totale. Pas automatisable, ou alors en récupérant les temps deb fin de chaque recording node...
 decay_from_open_ephys = seconds(start_reccord_sec - start);   %26*60 + 40; % seconds
 
 % Align Open Ephys time with cumulative MATLAB session time
