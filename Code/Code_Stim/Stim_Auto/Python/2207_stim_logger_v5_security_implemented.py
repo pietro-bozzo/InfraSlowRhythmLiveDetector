@@ -163,6 +163,14 @@ def main():
 
                 # ── ARRÊT D'URGENCE ─────────────────────────────────────────────────────
                 if cmd in ("E", "EXIT", "P", "PAUSE"):
+                    if not session_active:
+                        print("  Aucune session active : arrêt d'urgence non envoyé.")
+                        continue
+
+                    if emergency_paused:
+                        print("  Le protocole est déjà en pause.")
+                        continue
+
                     try:
                         ser.write(SYSEX_PAUSE)
                         ser.flush()
