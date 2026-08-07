@@ -11,5 +11,5 @@ from Detector_final import ISDetector, PyProcessor
 # =============================================================================
 class MockProcessor:
     def add_python_event(self,a,b):
-        print(f'added python event: {a},{b}')
+        print(f'added python event: {a}, {b}')
         return
