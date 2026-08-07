@@ -1,15 +1,24 @@
-# =============================================================================
-# Python Processor for Open-Ephys Plugin — Parallel Multi-Config Detector
-# =============================================================================
-# Ce fichier ne doit PAS être modifié entre les sessions.
-# Toute la configuration (canaux, TTL, détecteurs) est dans oe_config.py.
-#
-# Chemin du fichier de config (seule constante à adapter si besoin) :
+"""
+last edit: 07/08/2026 12:00
+
+=============================================================================
+Python Processor for Open Ephys Plugin — Parallel Multi-Config Detector
+=============================================================================
+
+TO DO: briefly describe here what this PyProcessor does
+
+This script loads a configuration file, e.g., 'oe_config.py', to set channels, TTLs, detectors, ...
+It should not be modified, except for the value of CONFIG_PATH
+
+TO DO: briefly describe here which configs are possible in the config file
+
+"""
+
+# only line that should be modified per run:
 CONFIG_PATH = "/mnt/hubel-data-103/Guillaume/InfraSlowRhythmLiveDetector/Code/Python/FINAL_Detector/CONFIGS/Hubel_tests/CONFIG_Karadoc_0305.py"
 # =============================================================================
 
 import numpy as np
-import oe_pyprocessor
 from collections import deque
 import os
 
@@ -17,6 +26,333 @@ import fileinput
 import time
 import json
 from datetime import datetime
+
+# =============================================================================
+# PyProcessor : orchestrateur principal
+# =============================================================================
+class PyProcessor:
+
+    def __init__(self, processor, num_channels, sample_rate, config_path=None):
+        print(f'Num Channels: {num_channels}| Sampling Rate: {sample_rate}')
+
+        self.processor = processor
+        self.num_channels = num_channels
+        self.sample_rate = sample_rate
+
+        self.time_counter = 0.0
+        self.global_t0 = -1
+
+        # Sliding windows partagées
+        self.mean_buffers = deque()
+        self.mean_buffer_time = 0.0
+        self.acceleration_buffers = deque()
+        self.acceleration_buffer_time = 0.0
+
+        # États internes non configurables
+        self.user_redo_tresh = False
+        self.user_counter_decision = 0
+        self.user_stop_IS_now = False
+        self.event_print = 0
+        self.debuglist = []
+        self.all_phase1_done = False
+
+        self.thrincr = False
+        self.thrdecr = False
+
+        self.previous_ttl_IS = False
+        self.previous_ttl_ON = False
+        self.previous_ttl_wake_REM_fr = False
+        self.previous_ttl_wake_REM_accel = False
+        self.previous_ttl_real_wake_acc = False
+
+        # Charger la configuration externe
+        self._load_config(config_path)
+
+    # -------------------------------------------------------------------------
+    def _load_config(self,config_path):
+        """
+        Charge oe_config.py via exec().
+        Toutes les lignes 'self.xxx = ...' du fichier sont exécutées dans le
+        contexte de cette instance, ce qui revient à les écrire dans __init__.
+        ISDetector est injecté dans le namespace d'exécution pour être
+        accessible depuis le fichier de config.
+        """
+
+        if config_path is None: config_path = CONFIG_PATH
+        config_path = os.path.abspath(config_path)
+        if not os.path.isfile(config_path):
+            raise FileNotFoundError(
+                f"[OE] Fichier de configuration introuvable : {config_path}\n"
+                f"Créez ce fichier ou modifiez CONFIG_PATH en tête du script."
+            )
+
+        with open(config_path, "r") as f:
+            config_code = f.read()
+
+        # ISDetector doit être accessible dans le namespace du exec()
+        exec(config_code, {"ISDetector": ISDetector, "self": self})
+
+        print(f"[OE] Config chargée depuis : {config_path}")
+        print(f"[OE] {len(self.detectors)} détecteur(s) : {[d.name for d in self.detectors]}")
+
+        # Vérifications de sécurité
+        required = [
+            "time_value_moy", "bin_duration_accel",
+            "ttl_ON", "ttl_IS", "ttl_thresholding", "ttl_wake_REM_fr", "ttl_real_wake_acc",
+            "ttl_wake_REM_accel", "ttl_phase2_done",
+            "ligne_threshold_integration", "ligne_stop_IS_now", "ligne_print",
+            "increase_threshold", "decrease_threshold", "pas_thresh_ajust",
+            "mean_spike_rate_channel", "accel_channel_1", "accel_channel_2", "accel_channel_3",
+            "saving", "path", "file_name", "debug_name",
+            "detectors", "ref_det",
+            "ttl_sync", "debugging", "n_channels",
+            "bin_duration_accel_window","bin_real_wake_acc"  #Ces 2 là ne sont pas utilisés à vrai dire puisque la détection de wake est faite dans le process_detection mais je les laisse pour la compatibilité avec OE_classic_CONFIG.py  
+        ]
+        missing = [k for k in required if not hasattr(self, k)]
+        if missing:
+            raise ValueError(f"[OE] Paramètres manquants dans oe_config.py : {missing}")
+
+    # =========================================================================
+    # TTL event handler
+    # =========================================================================
+    def handle_ttl_event(self, source_node, channel, sample_number, line, state):
+
+        if line == self.ligne_threshold_integration and state == True and not self.user_redo_tresh:
+            self.user_redo_tresh = True
+            self.user_counter_decision += 1
+            self.processor.add_python_event(self.ttl_thresholding, True)
+            for det in self.detectors:
+                det.reset_all()
+            self.all_phase1_done = False
+            print(f"[OE] Phase 1 démarrée pour {len(self.detectors)} détecteurs.")
+            self.processor.add_python_event(self.ttl_ON, False)
+            self.processor.add_python_event(self.ttl_IS, False)
+            self.processor.add_python_event(self.ttl_wake_REM_fr, False)
+            self.processor.add_python_event(self.ttl_wake_REM_accel, False)
+            self.processor.add_python_event(self.ttl_phase2_done, False)
+            self.processor.add_python_event(self.ttl_real_wake_acc, False)
+
+        if line == self.ligne_threshold_integration and state == False:
+            self.processor.add_python_event(self.ttl_thresholding, False)
+
+        if line == self.ligne_stop_IS_now and state == True:
+            self.user_stop_IS_now = True
+
+        if line == self.ligne_stop_IS_now and state == False:
+            self.user_stop_IS_now = False
+
+        if line == self.ligne_print and state == True and self.event_print == 0:
+            self.event_print += 1
+
+        if line == self.ligne_print and state == False:
+            self.event_print = 0
+
+        # NOUVEAU — ajustement manuel du seuil, appliqué à tous les détecteurs
+        if line == self.increase_threshold and state == True and not self.thrincr:
+            self.thrincr = True
+            for det in self.detectors:
+                det.threshold_value += self.pas_thresh_ajust
+                if det.phase2_done:
+                    det.threshold_value_sws += self.pas_thresh_ajust
+        if line == self.increase_threshold and state == False:
+            self.thrincr = False
+
+        if line == self.decrease_threshold and state == True and not self.thrdecr:
+            self.thrdecr = True
+            for det in self.detectors:
+                det.threshold_value -= self.pas_thresh_ajust
+                if det.phase2_done:
+                    det.threshold_value_sws -= self.pas_thresh_ajust
+        if line == self.decrease_threshold and state == False:
+            self.thrdecr = False
+
+        return
+
+    # =========================================================================
+    # Main processing loop
+    # =========================================================================
+    def process(self, data):
+
+        if getattr(self, '_sync_ttl_pending', False):
+                    self._sync_ttl_pending = False
+                    self.processor.add_python_event(self.ttl_sync, True)
+                    self._sync_ttl_end_time = self.time_counter + 1.0
+        
+                # Couper le TTL de sync après 1 seconde
+        if hasattr(self, '_sync_ttl_end_time') and self._sync_ttl_end_time > 0:
+                    if self.time_counter >= self._sync_ttl_end_time:
+                        self.processor.add_python_event(self.ttl_sync, False)
+                        self._sync_ttl_end_time = 0.0
+
+        # ---- Sliding windows partagées ----
+        mean_spike = data[self.mean_spike_rate_channel, :]
+        accel1 = np.mean(data[self.accel_channel_1, :])
+        accel2 = np.mean(data[self.accel_channel_2, :])
+        accel3 = np.mean(data[self.accel_channel_3, :])
+
+        buffer_duration = mean_spike.shape[0] / self.sample_rate
+        self.time_counter += buffer_duration
+        current_mean = np.mean(mean_spike)
+
+        self.mean_buffers.append((buffer_duration, current_mean))
+        self.mean_buffer_time += buffer_duration
+        while self.mean_buffer_time > self.time_value_moy:
+            dt, val = self.mean_buffers.popleft()
+            self.mean_buffer_time -= dt
+        moy_glissante = np.mean([v for _, v in self.mean_buffers])
+
+        norm_acceleration = ((accel1**2 + accel2**2 + accel3**2)**0.5) * 10000
+        self.acceleration_buffers.append((buffer_duration, norm_acceleration))
+        self.acceleration_buffer_time += buffer_duration
+        while self.acceleration_buffer_time > self.bin_duration_accel:
+            dt, val = self.acceleration_buffers.popleft()
+            self.acceleration_buffer_time -= dt
+        variance_glissante = np.var([v for _, v in self.acceleration_buffers])
+
+        # ---- Debug print ----
+        if self.event_print == 1:
+            self.event_print = 2
+            n_p1 = sum(1 for d in self.detectors if d.threshold_calculated)
+            n_p2 = sum(1 for d in self.detectors if d.phase2_done)
+            self.debuglist.append(
+                f"[OE DEBUG] t={self.time_counter:.3f}s"
+                f" | cur={current_mean:.4f} | moy={moy_glissante:.4f}"
+                f" | accel={norm_acceleration:.4f} | var={variance_glissante:.4f}"
+                f" | p1={n_p1}/{len(self.detectors)}"
+                f" | p2={n_p2}/{len(self.detectors)}"
+            )
+            if self.debugging:
+                debug_path = os.path.abspath(self.path + self.debug_name)
+                with open(debug_path, "a") as f:
+                    print("acceleration :", norm_acceleration, file=f)
+                    for i in range(self.n_channels):
+                        print(f"Channel {i} last : {data[i, -1]}", file=f)
+
+        # ---- Attendre déclenchement user ----
+        if self.user_counter_decision < 1:
+            return
+
+        # ---- Stop IS ----
+        if self.user_stop_IS_now:
+            for det in self.detectors:
+                det._reset_detection_states()
+            self.processor.add_python_event(self.ttl_ON, False)
+            self.processor.add_python_event(self.ttl_IS, False)
+            self.processor.add_python_event(self.ttl_wake_REM_fr, False)
+            self.processor.add_python_event(self.ttl_wake_REM_accel, False)
+            self.processor.add_python_event(self.ttl_real_wake_acc, False)
+
+        # =========================================================================
+        # PHASE 1 (parallèle) — bloquante jusqu'à ce que tous les détecteurs aient fini
+        # =========================================================================
+        if not self.all_phase1_done:
+            all_done = True
+            for det in self.detectors:
+                done = det.accumulate_phase1(mean_spike, norm_acceleration, buffer_duration)
+                if not done:
+                    all_done = False
+            if all_done:
+                self.all_phase1_done = True
+                self.user_redo_tresh = False
+                self.processor.add_python_event(self.ttl_thresholding, False)
+                print(f"[OE] Phase 1 terminée (t={self.time_counter:.1f}s)")
+                for det in self.detectors:
+                    print(f"  {det.name}: thresh_fr={det.threshold_value:.4f}"
+                          f" | variance_init={det.variance_init:.6f}")
+            return
+
+        # =========================================================================
+        # PHASE 1 terminée → détection + Phase 2 en parallèle
+        # =========================================================================
+        phase2_was_done_ref = self.ref_det.phase2_done
+
+        for det in self.detectors:
+            is_state, wake_REM_state = det.process_detection(
+                current_mean, moy_glissante, variance_glissante,
+                buffer_duration, self.time_counter
+            )
+            det.accumulate_phase2(mean_spike, buffer_duration, wake_REM_state)
+
+        # TTL phase2_done quand ref_det passe en Phase 2
+        if not phase2_was_done_ref and self.ref_det.phase2_done:
+            self.processor.add_python_event(self.ttl_phase2_done, True)
+            print(f"[OE] Phase 2 terminée pour ref_det (t={self.time_counter:.1f}s)"
+                  f" | thresh_sws={self.ref_det.threshold_value_sws:.4f}")
+
+        # TTL de sortie depuis ref_det
+        if self.ref_det.IS_state != self.previous_ttl_IS:
+            self.previous_ttl_IS = self.ref_det.IS_state
+            self.processor.add_python_event(self.ttl_IS, self.ref_det.IS_state)
+        if self.ref_det.ON_state != self.previous_ttl_ON:
+            self.previous_ttl_ON = self.ref_det.ON_state
+            self.processor.add_python_event(self.ttl_ON, self.ref_det.ON_state)
+        if self.ref_det.wake_REM_state_fr != self.previous_ttl_wake_REM_fr:
+            self.previous_ttl_wake_REM_fr = self.ref_det.wake_REM_state_fr
+            self.processor.add_python_event(self.ttl_wake_REM_fr, self.ref_det.wake_REM_state_fr)
+        if self.ref_det.wake_REM_state_accel != self.previous_ttl_wake_REM_accel:
+            self.previous_ttl_wake_REM_accel = self.ref_det.wake_REM_state_accel
+            self.processor.add_python_event(self.ttl_wake_REM_accel, self.ref_det.wake_REM_state_accel)
+        if self.ref_det.real_wake_acc_state != self.previous_ttl_real_wake_acc:
+            self.previous_ttl_real_wake_acc = self.ref_det.real_wake_acc_state
+            self.processor.add_python_event(self.ttl_real_wake_acc, self.ref_det.real_wake_acc_state)
+
+       # self.processor.add_python_event(self.ttl_IS, self.ref_det.IS_state)
+       # self.processor.add_python_event(self.ttl_ON, self.ref_det.ON_state)
+       # self.processor.add_python_event(self.ttl_wake_REM_fr, self.ref_det.wake_REM_state_fr)
+       # self.processor.add_python_event(self.ttl_wake_REM_accel, self.ref_det.wake_REM_state_accel)
+       # self.processor.add_python_event(self.ttl_real_wake_acc, self.ref_det.real_wake_state_accel)
+
+    # =========================================================================
+    # Callbacks
+    # =========================================================================
+    def start_acquisition(self):
+        print("[OE] Début acquisition")
+
+    def start_recording(self, recording_dir):
+        if self.global_t0 == -1:
+            self.global_t0 = self.time_counter
+        self._sync_ttl_pending = True
+
+    def stop_acquisition(self):
+        if not self.saving:
+            return
+
+        namedossier = os.path.abspath(self.path + self.file_name)
+        debug_path  = os.path.abspath(self.path + self.debug_name)
+
+        try:
+            with open(namedossier, "r") as f_read:
+                line_count = sum(1 for _ in f_read)
+        except FileNotFoundError:
+            line_count = 0
+
+        with open(namedossier, "a") as f:
+            print(f"STOP ACQUISITION NUMBER {int(line_count / 5) + 1}", file=f)
+            print(f"Config: {CONFIG_PATH}", file=f)
+            print(f"global_t0 (s): {self.global_t0}", file=f)
+            print("", file=f)
+
+            for det in self.detectors:
+                print(f"=== {det.name} : {det.description} ===", file=f)
+                print(f"  threshold_value (Phase 1, p{det.percentage}): {det.threshold_value}", file=f)
+                print(f"  threshold_value_sws (Phase 2, p{det.percentage_sws}): {det.threshold_value_sws}", file=f)
+                print(f"  phase2_sws_time_accumulated (s): {det.phase2_sws_time:.1f}", file=f)
+                print(f"  variance_init: {det.variance_init}", file=f)
+                print(f"  IS timing markers: {det.L_time_IS}", file=f)
+                print(f"  wake/REM (FR) markers: {det.L_time_wake_REM_fr}", file=f)
+                print(f"  wake/REM (accel) markers: {det.L_time_wake_REM_accel}", file=f)
+                print(f"  real wake accelerometer timing markers : {det.L_time_real_wake_acc} ", file=f)
+                print("", file=f)
+
+            print(f"debug list: {self.debuglist}", file=f)
+
+        with open(debug_path, "a") as f:
+            print(f"[stop_acquisition] t={self.time_counter:.1f}s", file=f)
+            for det in self.detectors:
+                print(f"  {det.name}: phase2_done={det.phase2_done}"
+                      f" | sws_time={det.phase2_sws_time:.1f}s"
+                      f" | thresh_sws={det.threshold_value_sws}", file=f)
+
 
 
 # =============================================================================
@@ -395,328 +731,3 @@ class ISDetector:
 
         return self.IS_state, wake_REM_state
 
-
-
-# =============================================================================
-# PyProcessor : orchestrateur principal
-# =============================================================================
-class PyProcessor:
-
-    def __init__(self, processor, num_channels, sample_rate):
-        print("Num Channels:", num_channels, "| Sample Rate:", sample_rate)
-
-        self.processor = processor
-        self.num_channels = num_channels
-        self.sample_rate = sample_rate
-
-        self.time_counter = 0.0
-        self.global_t0 = -1
-
-        # Sliding windows partagées
-        self.mean_buffers = deque()
-        self.mean_buffer_time = 0.0
-        self.acceleration_buffers = deque()
-        self.acceleration_buffer_time = 0.0
-
-        # États internes non configurables
-        self.user_redo_tresh = False
-        self.user_counter_decision = 0
-        self.user_stop_IS_now = False
-        self.event_print = 0
-        self.debuglist = []
-        self.all_phase1_done = False
-
-        self.thrincr = False
-        self.thrdecr = False
-
-        self.previous_ttl_IS = False
-        self.previous_ttl_ON = False
-        self.previous_ttl_wake_REM_fr = False
-        self.previous_ttl_wake_REM_accel = False
-        self.previous_ttl_real_wake_acc = False
-
-        # Charger la configuration externe
-        self._load_config()
-
-    # -------------------------------------------------------------------------
-    def _load_config(self):
-        """
-        Charge oe_config.py via exec().
-        Toutes les lignes 'self.xxx = ...' du fichier sont exécutées dans le
-        contexte de cette instance, ce qui revient à les écrire dans __init__.
-        ISDetector est injecté dans le namespace d'exécution pour être
-        accessible depuis le fichier de config.
-        """
-        config_path = os.path.abspath(CONFIG_PATH)
-        if not os.path.isfile(config_path):
-            raise FileNotFoundError(
-                f"[OE] Fichier de configuration introuvable : {config_path}\n"
-                f"Créez ce fichier ou modifiez CONFIG_PATH en tête du script."
-            )
-
-        with open(config_path, "r") as f:
-            config_code = f.read()
-
-        # ISDetector doit être accessible dans le namespace du exec()
-        exec(config_code, {"ISDetector": ISDetector, "self": self})
-
-        print(f"[OE] Config chargée depuis : {config_path}")
-        print(f"[OE] {len(self.detectors)} détecteur(s) : {[d.name for d in self.detectors]}")
-
-        # Vérifications de sécurité
-        required = [
-            "time_value_moy", "bin_duration_accel",
-            "ttl_ON", "ttl_IS", "ttl_thresholding", "ttl_wake_REM_fr", "ttl_real_wake_acc",
-            "ttl_wake_REM_accel", "ttl_phase2_done",
-            "ligne_threshold_integration", "ligne_stop_IS_now", "ligne_print",
-            "increase_threshold", "decrease_threshold", "pas_thresh_ajust",
-            "mean_spike_rate_channel", "accel_channel_1", "accel_channel_2", "accel_channel_3",
-            "saving", "path", "file_name", "debug_name",
-            "detectors", "ref_det",
-            "ttl_sync", "debugging", "n_channels",
-            "bin_duration_accel_window","bin_real_wake_acc"  #Ces 2 là ne sont pas utilisés à vrai dire puisque la détection de wake est faite dans le process_detection mais je les laisse pour la compatibilité avec OE_classic_CONFIG.py  
-        ]
-        missing = [k for k in required if not hasattr(self, k)]
-        if missing:
-            raise ValueError(f"[OE] Paramètres manquants dans oe_config.py : {missing}")
-
-    # =========================================================================
-    # TTL event handler
-    # =========================================================================
-    def handle_ttl_event(self, source_node, channel, sample_number, line, state):
-
-        if line == self.ligne_threshold_integration and state == True and not self.user_redo_tresh:
-            self.user_redo_tresh = True
-            self.user_counter_decision += 1
-            self.processor.add_python_event(self.ttl_thresholding, True)
-            for det in self.detectors:
-                det.reset_all()
-            self.all_phase1_done = False
-            print(f"[OE] Phase 1 démarrée pour {len(self.detectors)} détecteurs.")
-            self.processor.add_python_event(self.ttl_ON, False)
-            self.processor.add_python_event(self.ttl_IS, False)
-            self.processor.add_python_event(self.ttl_wake_REM_fr, False)
-            self.processor.add_python_event(self.ttl_wake_REM_accel, False)
-            self.processor.add_python_event(self.ttl_phase2_done, False)
-            self.processor.add_python_event(self.ttl_real_wake_acc, False)
-
-        if line == self.ligne_threshold_integration and state == False:
-            self.processor.add_python_event(self.ttl_thresholding, False)
-
-        if line == self.ligne_stop_IS_now and state == True:
-            self.user_stop_IS_now = True
-
-        if line == self.ligne_stop_IS_now and state == False:
-            self.user_stop_IS_now = False
-
-        if line == self.ligne_print and state == True and self.event_print == 0:
-            self.event_print += 1
-
-        if line == self.ligne_print and state == False:
-            self.event_print = 0
-
-        # NOUVEAU — ajustement manuel du seuil, appliqué à tous les détecteurs
-        if line == self.increase_threshold and state == True and not self.thrincr:
-            self.thrincr = True
-            for det in self.detectors:
-                det.threshold_value += self.pas_thresh_ajust
-                if det.phase2_done:
-                    det.threshold_value_sws += self.pas_thresh_ajust
-        if line == self.increase_threshold and state == False:
-            self.thrincr = False
-
-        if line == self.decrease_threshold and state == True and not self.thrdecr:
-            self.thrdecr = True
-            for det in self.detectors:
-                det.threshold_value -= self.pas_thresh_ajust
-                if det.phase2_done:
-                    det.threshold_value_sws -= self.pas_thresh_ajust
-        if line == self.decrease_threshold and state == False:
-            self.thrdecr = False
-
-        return
-
-    # =========================================================================
-    # Main processing loop
-    # =========================================================================
-    def process(self, data):
-
-        if getattr(self, '_sync_ttl_pending', False):
-                    self._sync_ttl_pending = False
-                    self.processor.add_python_event(self.ttl_sync, True)
-                    self._sync_ttl_end_time = self.time_counter + 1.0
-        
-                # Couper le TTL de sync après 1 seconde
-        if hasattr(self, '_sync_ttl_end_time') and self._sync_ttl_end_time > 0:
-                    if self.time_counter >= self._sync_ttl_end_time:
-                        self.processor.add_python_event(self.ttl_sync, False)
-                        self._sync_ttl_end_time = 0.0
-
-        # ---- Sliding windows partagées ----
-        mean_spike = data[self.mean_spike_rate_channel, :]
-        accel1 = np.mean(data[self.accel_channel_1, :])
-        accel2 = np.mean(data[self.accel_channel_2, :])
-        accel3 = np.mean(data[self.accel_channel_3, :])
-
-        buffer_duration = mean_spike.shape[0] / self.sample_rate
-        self.time_counter += buffer_duration
-        current_mean = np.mean(mean_spike)
-
-        self.mean_buffers.append((buffer_duration, current_mean))
-        self.mean_buffer_time += buffer_duration
-        while self.mean_buffer_time > self.time_value_moy:
-            dt, val = self.mean_buffers.popleft()
-            self.mean_buffer_time -= dt
-        moy_glissante = np.mean([v for _, v in self.mean_buffers])
-
-        norm_acceleration = ((accel1**2 + accel2**2 + accel3**2)**0.5) * 10000
-        self.acceleration_buffers.append((buffer_duration, norm_acceleration))
-        self.acceleration_buffer_time += buffer_duration
-        while self.acceleration_buffer_time > self.bin_duration_accel:
-            dt, val = self.acceleration_buffers.popleft()
-            self.acceleration_buffer_time -= dt
-        variance_glissante = np.var([v for _, v in self.acceleration_buffers])
-
-        # ---- Debug print ----
-        if self.event_print == 1:
-            self.event_print = 2
-            n_p1 = sum(1 for d in self.detectors if d.threshold_calculated)
-            n_p2 = sum(1 for d in self.detectors if d.phase2_done)
-            self.debuglist.append(
-                f"[OE DEBUG] t={self.time_counter:.3f}s"
-                f" | cur={current_mean:.4f} | moy={moy_glissante:.4f}"
-                f" | accel={norm_acceleration:.4f} | var={variance_glissante:.4f}"
-                f" | p1={n_p1}/{len(self.detectors)}"
-                f" | p2={n_p2}/{len(self.detectors)}"
-            )
-            if self.debugging:
-                debug_path = os.path.abspath(self.path + self.debug_name)
-                with open(debug_path, "a") as f:
-                    print("acceleration :", norm_acceleration, file=f)
-                    for i in range(self.n_channels):
-                        print(f"Channel {i} last : {data[i, -1]}", file=f)
-
-        # ---- Attendre déclenchement user ----
-        if self.user_counter_decision < 1:
-            return
-
-        # ---- Stop IS ----
-        if self.user_stop_IS_now:
-            for det in self.detectors:
-                det._reset_detection_states()
-            self.processor.add_python_event(self.ttl_ON, False)
-            self.processor.add_python_event(self.ttl_IS, False)
-            self.processor.add_python_event(self.ttl_wake_REM_fr, False)
-            self.processor.add_python_event(self.ttl_wake_REM_accel, False)
-            self.processor.add_python_event(self.ttl_real_wake_acc, False)
-
-        # =========================================================================
-        # PHASE 1 (parallèle) — bloquante jusqu'à ce que tous les détecteurs aient fini
-        # =========================================================================
-        if not self.all_phase1_done:
-            all_done = True
-            for det in self.detectors:
-                done = det.accumulate_phase1(mean_spike, norm_acceleration, buffer_duration)
-                if not done:
-                    all_done = False
-            if all_done:
-                self.all_phase1_done = True
-                self.user_redo_tresh = False
-                self.processor.add_python_event(self.ttl_thresholding, False)
-                print(f"[OE] Phase 1 terminée (t={self.time_counter:.1f}s)")
-                for det in self.detectors:
-                    print(f"  {det.name}: thresh_fr={det.threshold_value:.4f}"
-                          f" | variance_init={det.variance_init:.6f}")
-            return
-
-        # =========================================================================
-        # PHASE 1 terminée → détection + Phase 2 en parallèle
-        # =========================================================================
-        phase2_was_done_ref = self.ref_det.phase2_done
-
-        for det in self.detectors:
-            is_state, wake_REM_state = det.process_detection(
-                current_mean, moy_glissante, variance_glissante,
-                buffer_duration, self.time_counter
-            )
-            det.accumulate_phase2(mean_spike, buffer_duration, wake_REM_state)
-
-        # TTL phase2_done quand ref_det passe en Phase 2
-        if not phase2_was_done_ref and self.ref_det.phase2_done:
-            self.processor.add_python_event(self.ttl_phase2_done, True)
-            print(f"[OE] Phase 2 terminée pour ref_det (t={self.time_counter:.1f}s)"
-                  f" | thresh_sws={self.ref_det.threshold_value_sws:.4f}")
-
-        # TTL de sortie depuis ref_det
-        if self.ref_det.IS_state != self.previous_ttl_IS:
-            self.previous_ttl_IS = self.ref_det.IS_state
-            self.processor.add_python_event(self.ttl_IS, self.ref_det.IS_state)
-        if self.ref_det.ON_state != self.previous_ttl_ON:
-            self.previous_ttl_ON = self.ref_det.ON_state
-            self.processor.add_python_event(self.ttl_ON, self.ref_det.ON_state)
-        if self.ref_det.wake_REM_state_fr != self.previous_ttl_wake_REM_fr:
-            self.previous_ttl_wake_REM_fr = self.ref_det.wake_REM_state_fr
-            self.processor.add_python_event(self.ttl_wake_REM_fr, self.ref_det.wake_REM_state_fr)
-        if self.ref_det.wake_REM_state_accel != self.previous_ttl_wake_REM_accel:
-            self.previous_ttl_wake_REM_accel = self.ref_det.wake_REM_state_accel
-            self.processor.add_python_event(self.ttl_wake_REM_accel, self.ref_det.wake_REM_state_accel)
-        if self.ref_det.real_wake_acc_state != self.previous_ttl_real_wake_acc:
-            self.previous_ttl_real_wake_acc = self.ref_det.real_wake_acc_state
-            self.processor.add_python_event(self.ttl_real_wake_acc, self.ref_det.real_wake_acc_state)
-
-       # self.processor.add_python_event(self.ttl_IS, self.ref_det.IS_state)
-       # self.processor.add_python_event(self.ttl_ON, self.ref_det.ON_state)
-       # self.processor.add_python_event(self.ttl_wake_REM_fr, self.ref_det.wake_REM_state_fr)
-       # self.processor.add_python_event(self.ttl_wake_REM_accel, self.ref_det.wake_REM_state_accel)
-       # self.processor.add_python_event(self.ttl_real_wake_acc, self.ref_det.real_wake_state_accel)
-
-    # =========================================================================
-    # Callbacks
-    # =========================================================================
-    def start_acquisition(self):
-        print("[OE] Début acquisition")
-
-    def start_recording(self, recording_dir):
-        if self.global_t0 == -1:
-            self.global_t0 = self.time_counter
-        self._sync_ttl_pending = True
-
-    def stop_acquisition(self):
-        if not self.saving:
-            return
-
-        namedossier = os.path.abspath(self.path + self.file_name)
-        debug_path  = os.path.abspath(self.path + self.debug_name)
-
-        try:
-            with open(namedossier, "r") as f_read:
-                line_count = sum(1 for _ in f_read)
-        except FileNotFoundError:
-            line_count = 0
-
-        with open(namedossier, "a") as f:
-            print(f"STOP ACQUISITION NUMBER {int(line_count / 5) + 1}", file=f)
-            print(f"Config: {CONFIG_PATH}", file=f)
-            print(f"global_t0 (s): {self.global_t0}", file=f)
-            print("", file=f)
-
-            for det in self.detectors:
-                print(f"=== {det.name} : {det.description} ===", file=f)
-                print(f"  threshold_value (Phase 1, p{det.percentage}): {det.threshold_value}", file=f)
-                print(f"  threshold_value_sws (Phase 2, p{det.percentage_sws}): {det.threshold_value_sws}", file=f)
-                print(f"  phase2_sws_time_accumulated (s): {det.phase2_sws_time:.1f}", file=f)
-                print(f"  variance_init: {det.variance_init}", file=f)
-                print(f"  IS timing markers: {det.L_time_IS}", file=f)
-                print(f"  wake/REM (FR) markers: {det.L_time_wake_REM_fr}", file=f)
-                print(f"  wake/REM (accel) markers: {det.L_time_wake_REM_accel}", file=f)
-                print(f"  real wake accelerometer timing markers : {det.L_time_real_wake_acc} ", file=f)
-                print("", file=f)
-
-            print(f"debug list: {self.debuglist}", file=f)
-
-        with open(debug_path, "a") as f:
-            print(f"[stop_acquisition] t={self.time_counter:.1f}s", file=f)
-            for det in self.detectors:
-                print(f"  {det.name}: phase2_done={det.phase2_done}"
-                      f" | sws_time={det.phase2_sws_time:.1f}s"
-                      f" | thresh_sws={det.threshold_value_sws}", file=f)
