@@ -1,6 +1,6 @@
- __pycache__/
- .vscode/
- .idea/
- *.asv
+__pycache__/
+.vscode/
+.idea/
+*.asv
 .venv/
 venv/
